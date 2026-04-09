@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>アンケート調査 - 妻に何と伝える？</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <style>
+        :root { --main-color: #455a64; --accent-color: #81d4fa; --bg-color: #f0f4f8; --card-bg: #ffffff; }
+        body { font-family: 'Helvetica Neue', Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif; background: var(--bg-color); margin: 0; padding: 20px; color: #333; line-height: 1.6; }
+        .dashboard { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 350px 1fr; gap: 20px; }
+        .card { background: var(--card-bg); padding: 25px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border-top: 6px solid var(--main-color); position: relative; }
+        h1 { font-size: 1.25rem; color: var(--main-color); text-align: center; margin: 0 0 8px 0; }
+        .subtitle { font-size: 0.9rem; color: #607d8b; text-align: center; margin-bottom: 25px; font-weight: bold; }
+        
+        /* フォーム要素 */
+        .form-group { margin-bottom: 20px; }
+        label { font-size: 0.85rem; font-weight: bold; display: block; margin-bottom: 8px; color: var(--main-color); }
+        select, textarea { width: 100%; padding: 12px; border: 2px solid #e0e6ed; border-radius: 10px; box-sizing: border-box; font-size: 1rem; transition: 0.3s; outline: none; }
+        select:focus, textarea:focus { border-color: var(--accent-color); }
+        
+        /* ボタン */
+        .submit-btn { width: 100%; padding: 16px; background: var(--main-color); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .submit-btn:hover { background: #263238; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+        .submit-btn:disabled { background: #cfd8dc; cursor: not-allowed; transform: none; }
+
+        /* 投票済みメッセージ */
+        #alreadyVotedMsg { display: none; text-align: center; padding: 20px; background: #e8f5e9; border-radius: 10px; color: #2e7d32; font-weight: bold; }
+
+        /* グラフ・リスト */
+        .chart-box { height: 400px; padding: 10px; }
+        .reasons-container { height: 350px; overflow-y: auto; background: #fafafa; padding: 15px; border-radius: 12px; border: 1px solid #eceff1; }
+        .reason-item { background: white; padding: 14px; border-radius: 10px; margin-bottom: 12px; font-size: 0.95rem; border-left: 6px solid var(--accent-color); box-shadow: 0 3px 6px rgba(0,0,0,0.03); }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; color: white; margin-right: 12px; font-weight: bold; vertical-align: middle; }
+        
+        .total-box { text-align: center; margin-top: 20px; padding: 15px; }
+        .total-val { font-size: 3rem; font-weight: bold; color: var(--main-color); line-height: 1; }
+
+        @media (max-width: 850px) { .dashboard { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="sidebar">
+        <div class="card" id="inputCard">
+            <h1>アンケート調査</h1>
+            <p class="subtitle">Q. 妻に何と伝える？</p>
+            
+            <div id="voteForm">
+                <div class="form-group">
+                    <label>回答を選択</label>
+                    <select id="choice">
+                        <option value="夢じゃなくて現実だ">1. 夢じゃなくて現実だ</option>
+                        <option value="へんな夢だね">2. へんな夢だね</option>
+                        <option value="まだ一緒に夢の中にいる">3. まだ一緒に夢の中にいる</option>
+                        <option value="ふたりで病院へ行こうか">4. ふたりで病院へ行こうか</option>
+                        <option value="その他">5. その他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>理由・補足（任意）</label>
+                    <textarea id="comment" rows="4" placeholder="（例）直感でそう思いました"></textarea>
+                </div>
+                <button class="submit-btn" id="submitBtn">回答を送信する</button>
+            </div>
+
+            <div id="alreadyVotedMsg">
+                ご回答ありがとうございました！<br>集計結果をお楽しみください。
+            </div>
+        </div>
+
+        <div class="card total-box">
+            <div style="font-size: 0.8rem; color: #607d8b; letter-spacing: 2px;">TOTAL RESPONSES</div>
+            <div id="totalDisplay" class="total-val">0</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="card">
+            <h3 style="font-size: 1rem; margin-bottom: 15px; color: var(--main-color);">得票割合（リアルタイム反映）</h3>
+            <div class="chart-box">
+                <canvas id="voteChart"></canvas>
+            </div>
+        </div>
+        <div class="card" style="margin-top: 20px;">
+            <h3 style="font-size: 1rem; margin-bottom: 15px; color: var(--main-color);">みんなのコメント</h3>
+            <div id="commentList" class="reasons-container"></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // --- Firebase設定 ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyAs70CECD6Yorxa-Mf2JmB-kjSNwMe_sds",
+        authDomain: "survey20260407.firebaseapp.com",
+        projectId: "survey20260407",
+        storageBucket: "survey20260407.firebasestorage.app",
+        messagingSenderId: "991146975183",
+        appId: "1:991146975183:web:d6d9c4b842905760ca3cba"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const COLLECTION_NAME = "survey_wife_01";
+    const VOTE_KEY = "voted_" + COLLECTION_NAME;
+
+    const ARRANGE_LIST = ["夢じゃなくて現実だ", "へんな夢だね", "まだ一緒に夢の中にいる", "ふたりで病院へ行こうか", "その他"];
+    const COLOR_DICT = {
+        "夢じゃなくて現実だ": "#3498db", "へんな夢だね": "#9b59b6", 
+        "まだ一緒に夢の中にいる": "#e67e22", "ふたりで病院へ行こうか": "#e74c3c", "その他": "#95a5a6"
+    };
+
+    // 重複投票チェック（ページ読み込み時）
+    if (localStorage.getItem(VOTE_KEY)) {
+        document.getElementById('voteForm').style.display = 'none';
+        document.getElementById('alreadyVotedMsg').style.display = 'block';
+    }
+
+    // グラフ初期化（％表示プラグインを有効化）
+    Chart.register(ChartDataLabels);
+    const ctx = document.getElementById('voteChart').getContext('2d');
+    const myChart = new Chart(ctx, {
+        type: 'pie',
+        data: { 
+            labels: [], 
+            datasets: [{ 
+                data: [], 
+                backgroundColor: [], 
+                borderWidth: 3, 
+                borderColor: '#ffffff' 
+            }] 
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 12, weight: 'bold' }, padding: 20 } },
+                datalabels: {
+                    color: '#fff',
+                    font: { weight: 'bold', size: 14 },
+                    formatter: (value, ctx) => {
+                        let sum = 0;
+                        let dataArr = ctx.chart.data.datasets[0].data;
+                        dataArr.map(data => { sum += data; });
+                        let percentage = (value * 100 / sum).toFixed(1) + "%";
+                        return value > 0 ? percentage : ''; // 0票の場合は表示しない
+                    }
+                }
+            }
+        }
+    });
+
+    // リアルタイム集計
+    const q = query(collection(db, COLLECTION_NAME), orderBy("ts", "desc"));
+    onSnapshot(q, (snapshot) => {
+        const counts = {};
+        ARRANGE_LIST.forEach(a => counts[a] = 0);
+        const listDiv = document.getElementById('commentList');
+        listDiv.innerHTML = '';
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            counts[data.choice]++;
+            if(data.comment && data.comment.trim()){
+                const div = document.createElement('div');
+                div.className = 'reason-item';
+                div.innerHTML = `<span class="badge" style="background:${COLOR_DICT[data.choice]}">${data.choice}</span><span>${escapeHtml(data.comment)}</span>`;
+                listDiv.appendChild(div);
+            }
+        });
+
+        document.getElementById('totalDisplay').textContent = snapshot.size;
+
+        const sortedData = ARRANGE_LIST.map(label => ({
+            label: label, count: counts[label], color: COLOR_DICT[label]
+        })).sort((a, b) => b.count - a.count);
+
+        myChart.data.labels = sortedData.map(d => d.label);
+        myChart.data.datasets[0].data = sortedData.map(d => d.count);
+        myChart.data.datasets[0].backgroundColor = sortedData.map(d => d.color);
+        myChart.update();
+    });
+
+    // 投票送信処理
+    window.submitVote = async () => {
+        const choice = document.getElementById('choice').value;
+        const comment = document.getElementById('comment').value;
+        const btn = document.getElementById('submitBtn');
+
+        if (!confirm("この内容で送信してよろしいですか？")) return;
+
+        btn.disabled = true;
+        try {
+            await addDoc(collection(db, COLLECTION_NAME), {
+                choice,
+                comment,
+                ts: Date.now()
+            });
+            
+            // ローカルストレージに「投票済み」を記録
+            localStorage.setItem(VOTE_KEY, "true");
+            
+            // 画面を投票済み状態に切り替え
+            document.getElementById('voteForm').style.transition = '0.5s';
+            document.getElementById('voteForm').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('voteForm').style.display = 'none';
+                document.getElementById('alreadyVotedMsg').style.display = 'block';
+            }, 500);
+
+        } catch (e) {
+            console.error(e);
+            alert("送信に失敗しました。時間をおいて再度お試しください。");
+            btn.disabled = false;
+        }
+    };
+
+    document.getElementById('submitBtn').addEventListener('click', submitVote);
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+</script>
+</body>
+</html>
